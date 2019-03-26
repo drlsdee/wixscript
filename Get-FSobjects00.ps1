@@ -38,13 +38,12 @@ class FSobject {
             $this.Source = $this.Path -creplace '^[^\\]*\\', ''
             $this.SubItems = $null
         }
-#        $this.SubFolders = $this.SubItems | Where-Object Attributes -EQ "Directory"
         $this.FillSubItems()
     }
 }
 
 
-$Location = "C:\Users\Administrator\Desktop\AZK_History"
+$Location = "C:\Users\Administrator\Desktop\AZK_History\1"
 
 Set-Location $Location
 $RootDir = Get-Item $Location
