@@ -50,10 +50,6 @@ Set-Location $Location
 $RootDir = Get-Item $Location
 $RootDir = [FSobject]::new($RootDir)
 
-$RootDir.Path | Resolve-Path
-$RootDir.Subdirs
-$RootDir.FillSubFolders()
-$RootDir.FillFiles()
 $RootDir.FillSubItems()
-$RootDir.Path | Resolve-Path
-$RootDir.Subdirs
+
+$RootDir.SubItems
