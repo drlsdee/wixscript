@@ -9,9 +9,8 @@ class FSobject {
     [string]$Path
     [string]$Source
     [FSItemType]$Type
-    [array]$Files
-    [array]$Subdirs
     [array]$SubItems
+#    [array]$SubFolders
 
     [void]FillSubItems(){
         $i = 0
@@ -30,7 +29,7 @@ class FSobject {
         $this.Id = $obj.BaseName
         $this.Name = $obj.Name
         $this.Path = $obj | Resolve-Path -Relative
-        If ($obj.Attributes -eq "Directory") {
+        If (Test-Path -Path $obj -PathType Container) {
             $this.Type = "folder"
             $this.Source = $null
             $this.SubItems = Get-ChildItem -Path $this.Path
@@ -39,17 +38,14 @@ class FSobject {
             $this.Source = $this.Path -creplace '^[^\\]*\\', ''
             $this.SubItems = $null
         }
-
+#        $this.SubFolders = $this.SubItems | Where-Object Attributes -EQ "Directory"
+        $this.FillSubItems()
     }
 }
 
 
-$Location = "C:\Users\Administrator\Desktop\AZK_History\1"
+$Location = "C:\Users\Administrator\Desktop\AZK_History"
 
 Set-Location $Location
 $RootDir = Get-Item $Location
 $RootDir = [FSobject]::new($RootDir)
-
-$RootDir.FillSubItems()
-
-$RootDir.SubItems
