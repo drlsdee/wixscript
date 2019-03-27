@@ -3,6 +3,11 @@
     folder
 }
 
+enum YesNoType {
+    yes
+    no
+}
+
 class FSobject {
     [string]$Id
     [string]$Name
@@ -46,9 +51,32 @@ class FSobject {
     }
 }
 
+class Product {
+    [string]$Name
+    [string]$Manufacturer
+    [string]$Id
+    [string]$UpgradeCode
+    [int]$Language
+    [int]$Codepage
+    [string]$Version
+}
+
+class Package {
+    [string]$Id
+    [string]$Keywords
+    [string]$Description
+    [string]$Comments
+    [string]$Manufacturer
+    [string]$InstallerVersion
+    [int]$Languages
+    [YesNoType]$Compressed
+    [int]$SummaryCodepage
+}
+
+$MainExecName = "maincontroller.exe"
 
 $Location = "C:\Users\Administrator\Desktop\AZK_History\1"
-
+$MainExecutable = Get-ChildItem -Path $Location -Recurse -Filter $MainExecName
 Set-Location $Location
 $RootDir = Get-Item $Location
 $RootDir = [FSobject]::new($RootDir)
