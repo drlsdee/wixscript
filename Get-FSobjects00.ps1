@@ -4,6 +4,7 @@
 }
 
 class FSobject {
+    [string]$xmlns
     [string]$Id
     [string]$Name
     [string]$Path
@@ -47,7 +48,11 @@ class FSobject {
     FSObject($obj){
         $this.Id = $obj.BaseName
         $this.Name = $obj.Name
-        $this.Path = $obj | Resolve-Path -Relative
+        if (Test-Path -Path $obj) {
+            $this.Path = $obj | Resolve-Path -Relative
+        } else {
+            $this.Path = $null
+        }
         $this.Depth = 1
         If (Test-Path -Path $obj -PathType Container) {
             $this.Type = "Directory"
@@ -55,7 +60,7 @@ class FSobject {
             $this.SubItems = Get-ChildItem -Path $this.Path #| Where-Object {$_.Attributes -notmatch $ignoreList}
         } Else {
             $this.Type = "File"
-            $this.Source = $this.Path -creplace '^[^\\]*\\', ''
+            $this.Source = $this.Path | Split-Path -Leaf
             $this.SubItems = $null
         }
         $this.GetChildItems()
@@ -88,20 +93,15 @@ class Package {
     [int]$SummaryCodepage
 }
 
-#$MainExecName = "maincontroller.exe"
-#$ignoreList = @("ReparsePoint")
-#$MainExecutable = Get-ChildItem -Path $Location -Recurse -Filter $MainExecName
-
 function makeXML {
     param (
         [System.Xml.XmlElement]$parentNode,
-        [FSobject]$class
+        $class
     )
     $attributeNames = @(
         "ID",
         "Name",
-        "Source"#,
-        #"Type"
+        "Source"
     )
     $attributeSet = $class.PSObject.Properties | Where-Object {($_.Name -in $attributeNames) -and ($_.Value)}
     $d = $parentNode.OwnerDocument.CreateElement($class.Type)
@@ -120,30 +120,31 @@ $Location = "C:\Users\Administrator\Desktop\AZK_History\1\azkplan"
 Set-Location $Location
 $RootDir = Get-Item $Location
 $RootDir = [FSobject]::new($RootDir)
-$testXMLDoc = New-Object -TypeName System.Xml.XmlDocument
 
-$tempOut = $RootDir | ConvertTo-Xml -Depth $RootDir.Depth -NoTypeInformation -As String
-$testXMLDoc.LoadXml($tempOut)
-$testXMLDoc.Save('C:\testXMLdoc.xml')
+$productNameNode =  [FSobject]::new()
+$productNameNode.Type = "Directory"
+$productNameNode.Id = "ProductID"
+$productNameNode.Name = "ProductName"
+$productNameNode.SubItems = $RootDir
+
+$installLocationNode = [FSobject]::new()
+$installLocationNode.Type = "Directory"
+$installLocationNode.Id = "ProgramFilesFolder"
+$installLocationNode.Name = "PFiles"
+$installLocationNode.SubItems = $productNameNode
+
+$targetDirNode = [FSobject]::new()
+$targetDirNode.Type = "Directory"
+$targetDirNode.Id = "TARGETDIR"
+$targetDirNode.Name = "SourceDir"
+$targetDirNode.SubItems = $installLocationNode
 
 $mainDocument = New-Object -TypeName System.Xml.XmlDocument
 $mainDocument.LoadXml("<Wix></Wix>")
 $mainElement = $mainDocument.SelectSingleNode("/Wix")
 $mainElement.SetAttribute("xmlns",'http://schemas.microsoft.com/wix/2006/wi')
-$fileElement = $mainElement.OwnerDocument.CreateElement("Directory")
-$fileElement.SetAttribute("ID","TARGETDIR")
-$fileElement.SetAttribute("Name","SourceDir")
-$mainElement.AppendChild($fileElement)
-$installLocation = $fileElement.OwnerDocument.CreateElement("Directory")
-$installLocation.SetAttribute("ID","ProgramFilesFolder")
-$installLocation.SetAttribute("Name","PFiles")
-$fileElement.AppendChild($installLocation)
-$productDir = $installLocation.OwnerDocument.CreateElement("Directory")
-$productDir.SetAttribute("ID","ProductID")
-$productDir.SetAttribute("Name","ProductName")
-$installLocation.AppendChild($productDir)
 
-makeXML $productDir $RootDir
+makeXML $mainElement $targetDirNode
 
 $mainDocument.Save('C:\mainDocument.xml')
 <#
