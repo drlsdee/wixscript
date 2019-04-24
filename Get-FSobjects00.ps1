@@ -4,14 +4,13 @@
 }
 
 class FSobject {
-    [string]$xmlns
+    [ValidateSet("File","Directory")]
+    [string]$Type
     [string]$Id
     [string]$Name
+    [array]$SubItems
     [string]$Path
     [string]$Source
-    [ValidateSet("File","Directory")]
-    [string]$Type # TODO ValidateSet
-    [array]$SubItems
     [int]$Depth
 
     [void] GetChildItems () {
@@ -60,7 +59,7 @@ class FSobject {
             $this.SubItems = Get-ChildItem -Path $this.Path #| Where-Object {$_.Attributes -notmatch $ignoreList}
         } Else {
             $this.Type = "File"
-            $this.Source = $this.Path | Split-Path -Leaf
+            $this.Source = $this.Path
             $this.SubItems = $null
         }
         $this.GetChildItems()
@@ -72,9 +71,9 @@ class FSobject {
 }
 
 class Product {
+    [string]$Id
     [string]$Name
     [string]$Manufacturer
-    [string]$Id
     [string]$UpgradeCode
     [int]$Language
     [int]$Codepage
@@ -89,7 +88,8 @@ class Package {
     [string]$Manufacturer
     [string]$InstallerVersion
     [int]$Languages
-    [YesNoType]$Compressed
+    [ValidateSet("Yes","No")]
+    [string]$Compressed
     [int]$SummaryCodepage
 }
 
@@ -140,15 +140,18 @@ $targetDirNode.Name = "SourceDir"
 $targetDirNode.SubItems = $installLocationNode
 
 $mainDocument = New-Object -TypeName System.Xml.XmlDocument
-$mainDocument.LoadXml("<Wix></Wix>")
-$mainElement = $mainDocument.SelectSingleNode("/Wix")
-$mainElement.SetAttribute("xmlns",'http://schemas.microsoft.com/wix/2006/wi')
+$decl = $mainDocument.CreateXmlDeclaration('1.0','windows-1251','')
+$WixRoot = $mainDocument.CreateElement("Wix")
+$WixRoot.SetAttribute("xmlns",'http://schemas.microsoft.com/wix/2006/wi')
+$mainDocument.InsertBefore($decl,$mainDocument.DocumentElement)
+$mainDocument.AppendChild($WixRoot)
 
-makeXML $mainElement $targetDirNode
+makeXML $WixRoot $targetDirNode
 
 $mainDocument.Save('C:\mainDocument.xml')
 <#
 TODO:
 function for creating root node
 get product name
+create XML element "Component" for files and create XML element "CreateFolder" for subfolders
 #>
