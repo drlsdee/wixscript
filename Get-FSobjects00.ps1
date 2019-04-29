@@ -1,9 +1,37 @@
-﻿class Wix {
+﻿function GenGuid {
+    # There are no parameters, just generate Guid in UPPERCASE
+    $newGuid = (New-Guid).Guid.ToUpper()
+    return $newGuid
+}
+
+class Wix {
     [string]$Type = $this.GetType().Name
-    [string]$ID
+    [string]$Id
     [string]$Name
+    $Parent
     [array]$SubItems
     [array]$attributeNames
+
+    [void] IDasGUID () {
+        if ($this.Id -eq $null) {
+            $this.Id = GenGuid
+        }
+    }
+
+    [void] IDbyName () {
+        $cleaned = (GenGUID) -replace "-", "_"
+        if ($this.BaseName) {
+            $this.Id = ("_", $this.BaseName -join "_")
+        } elseif ($this.Name) {
+            $this.Id = ("_", $this.Name -join "_")
+        } else {
+            $this.Id = "_", $cleaned -join "_"
+        }
+    }
+
+    Wix () {
+        $this.IDasGUID()
+    }
 }
 
 class Product : Wix {
@@ -13,18 +41,15 @@ class Product : Wix {
     [int]$Language
     [int]$Codepage
     [string]$Version
-}
 
-class Component : Wix {
-    [string]$GUID
-    [array]$attributeNames = @(
-        "ID",
-        "GUID"
-    )
-
-    Component ($obj) {
-        $this.GUID = (New-Guid).Guid.ToUpper()
-        $this.ID = $obj.ID, $this.GUID -join "+"
+    Product ($main) {
+        $this.attributeNames = @("Name", "Manufacturer", "UpgradeCode", "Language", "Codepage", "Version", "Id")
+        $this.Name = $main.VersionInfo.ProductName
+        $this.Manufacturer = $main.VersionInfo.CompanyName
+        $this.UpgradeCode = GenGuid
+        $this.Language = [System.Globalization.CultureInfo]::GetCultures("AllCultures").Where({$_.DisplayName -eq $main.VersionInfo.Language}).LCID
+        $this.Codepage = [System.Globalization.CultureInfo]::GetCultures("AllCultures").Where({$_.DisplayName -eq $main.VersionInfo.Language}).TextInfo.ANSICodePage
+        $this.Version = $main.VersionInfo.FileVersion
     }
 }
 
@@ -38,6 +63,55 @@ class Package : Wix {
     [ValidateSet("Yes","No")]
     [string]$Compressed
     [int]$SummaryCodepage
+
+    Package ($main) {
+        $this.attributeNames = @("Comments", "Compressed", "Description", "Id", "InstallerVersion", "Keywords", "Languages", "Manufacturer", "SummaryCodepage")
+        $this.Description = $main.FileDescription
+        $this.Comments = $main.LegalCopyright
+        $this.Manufacturer = $main.CompanyName
+        $this.Languages = [System.Globalization.CultureInfo]::GetCultures("AllCultures").Where({$_.DisplayName -eq $main.VersionInfo.Language}).LCID
+        $this.SummaryCodepage = [System.Globalization.CultureInfo]::GetCultures("AllCultures").Where({$_.DisplayName -eq $main.VersionInfo.Language}).TextInfo.ANSICodePage
+        $this.Id = "*" # TODO: If parent is "Product", Id = *; if parent is "Module", Id = GUID
+    }
+}
+
+class Component : Wix {
+    [string]$Guid
+    [array]$attributeNames = @(
+        "Id",
+        "Guid"
+    )
+
+    Component ($obj) {
+        $this.Guid = GenGuid
+        $this.IDbyName()
+    }
+}
+
+class Media : Wix {
+    [array]$attributeNames = @("Id", "Cabinet", "CompressionLevel", "DiskPrompt", "EmbedCab", "Layout", "Source", "VolumeLabel")
+    [ValidatePattern('((\d+)|(\$\(\w+\.(\w|[.])+\)))+', Options = "None")]
+    [string]$Id
+    [string]$Cabinet
+    [ValidateSet("mszip", "high", "low", "medium", "none")]
+    [string]$CompressionLevel
+    [string]$DiskPrompt
+    [ValidateSet("Yes","No")]
+    [string]$EmbedCab
+    [string]$Layout
+    [string]$Source
+    [string]$VolumeLabel
+}
+
+
+class ComponentRef : Wix {
+    [ValidateSet("yes","no")]
+    [string]$Primary
+    [array]$attributeNames = @("Id", "Primary")
+
+    ComponentRef ($obj) {
+        $this.Id = $obj.Id
+    }
 }
 
 class WixFSObject : Wix {
@@ -45,13 +119,13 @@ class WixFSObject : Wix {
     [string]$Source
 
     [void] GetName ($object) {
-        $this.ID = $object.BaseName
         $this.Name = $object.Name
         if (Test-Path -Path $object) {
             $this.Path = $object | Resolve-Path -Relative
         } else {
             $this.Path = $null
         }
+        $this.IDbyName()
     }
 
     [void] GetChildItems ($property, $class) {
@@ -59,6 +133,7 @@ class WixFSObject : Wix {
         while ($count -lt $property.Count) {
             $item = Get-Item ($property[$count] | Resolve-Path -Relative)
             $item = $class::new($item)
+            $item.Parent = $this
             $property[$count] = $item
             $count++
         }
@@ -69,7 +144,6 @@ class WixFSObject : Wix {
 
     WixFSObject($obj){
         $this.GetName($obj)
-        $this.GetSubElements($obj)
         $this.GetChildItems()
     }
 }
@@ -80,14 +154,36 @@ class CreateFolder : Wix {
 
     CreateFolder ($obj) {
         $this.attributeNames += "Directory"
-        $this.Directory = $obj.Name
+        $this.Directory = $obj.Id
+    }
+}
+
+class Feature : WixFSObject {
+    [ValidateSet("allow","disallow")]
+    [string]$Absent
+    [ValidateSet("no","system","yes")]
+    [string]$AllowAdvertise
+    [string]$ConfigurableDirectory
+    [string]$Description
+    [ValidateSet("collapse","expand","hidden")]
+    [string]$Display
+    [ValidateSet("followParent","local","source")]
+    [string]$InstallDefault
+    [int]$Level
+    [string]$Title
+    [ValidateSet("advertise","install")]
+    [string]$TypicalDefault
+    [array]$attributeNames = @("Id", "Absent", "AllowAdvertise", "ConfigurableDirectory", "Description", "Display", "InstallDefault", "Level", "Title", "TypicalDefault")
+
+    Feature () {
+        $this.IDbyName()
     }
 }
 
 
 class Directory : WixFSObject {
     [array]$attributeNames = @(
-        "ID",
+        "Id",
         "Name"
     )
     [array]$childFiles
@@ -99,6 +195,9 @@ class Directory : WixFSObject {
         if ($this.childFiles) {
             $comp = [Component]::new($this)
             $comp.SubItems = $this.childFiles
+            foreach ($subFolder in $this.createdFolders) {
+                $comp.SubItems += $subFolder
+            }
             $this.childComponents += $comp
         }
     }
@@ -118,7 +217,7 @@ class Directory : WixFSObject {
     }
 
     [void]CollectItems () {
-        $items = @($this.childComponents, $this.createdFolders, $this.childDirs)
+        $items = @($this.childComponents, $this.childDirs)
         $out = @()
         foreach ($item in $items -ne $null) {
             $out += $item
@@ -143,7 +242,7 @@ class Directory : WixFSObject {
 
 class File : WixFSObject {
     [array]$attributeNames = @(
-        "ID",
+        "Id",
         "Name",
         "Source"
     )
@@ -174,23 +273,76 @@ function makeXML {
 
 $Location = "C:\Users\Administrator\Desktop\AZK_History\1\azkplan"
 Set-Location $Location
+
+$ComponentRefArray = @()
+
 $RootDir = Get-Item $Location
 $RootDir = [Directory]::new($RootDir)
 
+$MainExecutableName = "maincontroller.exe"
+$MainExecutable = Get-ChildItem -Path $RootDir.Path -Recurse | Where-Object {$_.Name -eq $MainExecutableName}
+
 $productNameNode = [Directory]::new()
-$productNameNode.ID = "ProductID"
+$productNameNode.Id = "ProductId"
 $productNameNode.Name = "ProductName"
 $productNameNode.SubItems = $RootDir
+$RootDir.Parent = $productNameNode
 
 $installLocationNode = [Directory]::new()
-$installLocationNode.ID = "ProgramFilesFolder"
+$installLocationNode.Id = "ProgramFilesFolder"
 $installLocationNode.Name = "PFiles"
 $installLocationNode.SubItems = $productNameNode
+$productNameNode.Parent = $installLocationNode
 
 $targetDirNode = [Directory]::new()
-$targetDirNode.ID = "TARGETDIR"
+$targetDirNode.Id = "TARGETDIR"
 $targetDirNode.Name = "SourceDir"
 $targetDirNode.SubItems = $installLocationNode
+$installLocationNode.Parent = $targetDirNode
+
+$packageNode = [Package]::new($MainExecutable)
+
+$mediaNode = [Media]::new()
+$mediaNode.Id = "1"
+
+$productNode = [Product]::new($MainExecutable)
+$productNode.SubItems += $packageNode
+$packageNode.Parent = $productNode
+
+$productNode.SubItems += $mediaNode
+$mediaNode.Parent = $productNode
+
+$productNode.SubItems += $targetDirNode
+$targetDirNode.Parent = $productNode
+
+$featureNode = [Feature]::new()
+
+function CollectComponents {
+    param (
+        $parentItem
+    )
+    foreach ($childcomp in $parentItem.childComponents) {
+        $comps += $childcomp
+    }
+    if ($parentItem.childDirs) {
+        foreach ($dir in $parentItem.childDirs) {
+            CollectComponents $dir
+        }
+    }
+    return $comps
+}
+
+$ComponentRefArray = CollectComponents $RootDir
+
+$featureNode.SubItems = foreach ($refId in $ComponentRefArray) {
+    [ComponentRef]::new($refId)
+}
+foreach ($item in $featureNode.SubItems) {$item.Parent = $featureNode}
+
+$productNode.SubItems += $featureNode
+$featureNode.Parent = $productNode
+
+$productNode.Parent = $WixRoot
 
 $mainDocument = New-Object -TypeName System.Xml.XmlDocument
 $decl = $mainDocument.CreateXmlDeclaration('1.0','windows-1251','')
@@ -199,12 +351,16 @@ $WixRoot.SetAttribute("xmlns",'http://schemas.microsoft.com/wix/2006/wi')
 $mainDocument.InsertBefore($decl,$mainDocument.DocumentElement)
 $mainDocument.AppendChild($WixRoot)
 
-makeXML $WixRoot $targetDirNode
+makeXML $WixRoot $productNode
+
+$prodPath = (Join-Path -Path ($RootDir.Path | Resolve-Path) -ChildPath $MainExecutable.BaseName) + ".wxs"
 
 $mainDocument.Save('C:\mainDocument.xml')
+$mainDocument.Save($prodPath)
+
 <#
 TODO:
 function for creating root node
-get product name
 get attributeSet
+get valid childElements
 #>
