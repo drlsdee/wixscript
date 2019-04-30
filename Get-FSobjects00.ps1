@@ -180,12 +180,13 @@ class WixFSObject : Wix {
     }
 }
 
-class CreateFolder : Wix {
+class CreateFolder : WixFSObject {
     [array]$attributeNames = @("Directory")
     [string]$Directory
 
     CreateFolder ($obj) {
-        $this.Directory = $obj.Id
+        $this.GetName($obj)
+        $this.Directory = $this.Id
     }
 }
 
