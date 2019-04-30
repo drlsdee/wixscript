@@ -30,12 +30,6 @@ class Wix {
         }
     }
 
-    [void] CreateChild ([System.Object]$class) {
-        $childItem = $class::new()
-        $this.SubItems += $childItem
-        $childItem.Parent = $this
-    }
-
     Wix () {
         $this.IDasGUID()
         $this.xmlns = "http://schemas.microsoft.com/wix/2006/wi"
