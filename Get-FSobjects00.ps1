@@ -8,9 +8,10 @@ class Wix {
     [string]$Type = $this.GetType().Name
     [string]$Id
     [string]$Name
+    [string]$xmlns
     $Parent
     [array]$SubItems
-    [array]$attributeNames
+    [array]$attributeNames = @("xmlns")
 
     [void] IDasGUID () {
         if ($this.Id -eq $null) {
@@ -31,10 +32,20 @@ class Wix {
 
     Wix () {
         $this.IDasGUID()
+        $this.xmlns = "http://schemas.microsoft.com/wix/2006/wi"
     }
 }
 
 class Product : Wix {
+    [array]$attributeNames = @(
+        "Name",
+        "Manufacturer",
+        "UpgradeCode",
+        "Language",
+        "Codepage",
+        "Version",
+        "Id"
+        )
     [string]$Name
     [string]$Manufacturer
     [string]$UpgradeCode
@@ -43,7 +54,6 @@ class Product : Wix {
     [string]$Version
 
     Product ($main) {
-        $this.attributeNames = @("Name", "Manufacturer", "UpgradeCode", "Language", "Codepage", "Version", "Id")
         $this.Name = $main.VersionInfo.ProductName
         $this.Manufacturer = $main.VersionInfo.CompanyName
         $this.UpgradeCode = GenGuid
@@ -54,21 +64,31 @@ class Product : Wix {
 }
 
 class Package : Wix {
+    [array]$attributeNames = @(
+        "Comments",
+        "Compressed",
+        "Description",
+        "Id",
+        "InstallerVersion",
+        "Keywords",
+        "Languages",
+        "Manufacturer",
+        "SummaryCodepage"
+        )
     [string]$Keywords
     [string]$Description
     [string]$Comments
     [string]$Manufacturer
     [string]$InstallerVersion
     [int]$Languages
-    [ValidateSet("Yes","No")]
-    [string]$Compressed
+    [ValidateSet("yes","no")]
+    [string]$Compressed = "yes"
     [int]$SummaryCodepage
 
     Package ($main) {
-        $this.attributeNames = @("Comments", "Compressed", "Description", "Id", "InstallerVersion", "Keywords", "Languages", "Manufacturer", "SummaryCodepage")
-        $this.Description = $main.FileDescription
-        $this.Comments = $main.LegalCopyright
-        $this.Manufacturer = $main.CompanyName
+        $this.Description = $main.VersionInfo.FileDescription
+        $this.Comments = $main.VersionInfo.LegalCopyright
+        $this.Manufacturer = $main.VersionInfo.CompanyName
         $this.Languages = [System.Globalization.CultureInfo]::GetCultures("AllCultures").Where({$_.DisplayName -eq $main.VersionInfo.Language}).LCID
         $this.SummaryCodepage = [System.Globalization.CultureInfo]::GetCultures("AllCultures").Where({$_.DisplayName -eq $main.VersionInfo.Language}).TextInfo.ANSICodePage
         $this.Id = "*" # TODO: If parent is "Product", Id = *; if parent is "Module", Id = GUID
@@ -89,15 +109,24 @@ class Component : Wix {
 }
 
 class Media : Wix {
-    [array]$attributeNames = @("Id", "Cabinet", "CompressionLevel", "DiskPrompt", "EmbedCab", "Layout", "Source", "VolumeLabel")
+    [array]$attributeNames = @(
+        "Id",
+        "Cabinet",
+        "CompressionLevel",
+        "DiskPrompt",
+        "EmbedCab",
+        "Layout",
+        "Source",
+        "VolumeLabel"
+        )
     [ValidatePattern('((\d+)|(\$\(\w+\.(\w|[.])+\)))+', Options = "None")]
     [string]$Id
-    [string]$Cabinet
+    [string]$Cabinet = "cabinet.cab"
     [ValidateSet("mszip", "high", "low", "medium", "none")]
-    [string]$CompressionLevel
+    [string]$CompressionLevel = "mszip"
     [string]$DiskPrompt
-    [ValidateSet("Yes","No")]
-    [string]$EmbedCab
+    [ValidateSet("yes","no")]
+    [string]$EmbedCab = "yes"
     [string]$Layout
     [string]$Source
     [string]$VolumeLabel
@@ -105,9 +134,12 @@ class Media : Wix {
 
 
 class ComponentRef : Wix {
+    [array]$attributeNames = @(
+        "Id",
+        "Primary"
+        )
     [ValidateSet("yes","no")]
     [string]$Primary
-    [array]$attributeNames = @("Id", "Primary")
 
     ComponentRef ($obj) {
         $this.Id = $obj.Id
@@ -149,16 +181,26 @@ class WixFSObject : Wix {
 }
 
 class CreateFolder : Wix {
-    [array]$attributeNames
+    [array]$attributeNames = @("Directory")
     [string]$Directory
 
     CreateFolder ($obj) {
-        $this.attributeNames += "Directory"
         $this.Directory = $obj.Id
     }
 }
 
 class Feature : WixFSObject {
+    [array]$attributeNames = @(
+        "Id",
+        "Absent",
+        "AllowAdvertise",
+        "ConfigurableDirectory",
+        "Description", "Display",
+        "InstallDefault",
+        "Level",
+        "Title",
+        "TypicalDefault"
+        )
     [ValidateSet("allow","disallow")]
     [string]$Absent
     [ValidateSet("no","system","yes")]
@@ -173,7 +215,6 @@ class Feature : WixFSObject {
     [string]$Title
     [ValidateSet("advertise","install")]
     [string]$TypicalDefault
-    [array]$attributeNames = @("Id", "Absent", "AllowAdvertise", "ConfigurableDirectory", "Description", "Display", "InstallDefault", "Level", "Title", "TypicalDefault")
 
     Feature () {
         $this.IDbyName()
@@ -282,38 +323,45 @@ $RootDir = [Directory]::new($RootDir)
 $MainExecutableName = "maincontroller.exe"
 $MainExecutable = Get-ChildItem -Path $RootDir.Path -Recurse | Where-Object {$_.Name -eq $MainExecutableName}
 
+function assignParent {
+    param (
+        $parent,
+        $child
+    )
+    $parent.SubItems += $child
+    $child.Parent = $parent
+}
+
+$packageNode = [Package]::new($MainExecutable)
+
 $productNameNode = [Directory]::new()
 $productNameNode.Id = "ProductId"
-$productNameNode.Name = "ProductName"
-$productNameNode.SubItems = $RootDir
-$RootDir.Parent = $productNameNode
+$productNameNode.Name = $productNode.Name
+
+assignParent $productNameNode $RootDir
 
 $installLocationNode = [Directory]::new()
 $installLocationNode.Id = "ProgramFilesFolder"
 $installLocationNode.Name = "PFiles"
-$installLocationNode.SubItems = $productNameNode
-$productNameNode.Parent = $installLocationNode
+
+assignParent $installLocationNode $productNameNode
 
 $targetDirNode = [Directory]::new()
 $targetDirNode.Id = "TARGETDIR"
 $targetDirNode.Name = "SourceDir"
-$targetDirNode.SubItems = $installLocationNode
-$installLocationNode.Parent = $targetDirNode
 
-$packageNode = [Package]::new($MainExecutable)
+assignParent $targetDirNode $installLocationNode
 
 $mediaNode = [Media]::new()
 $mediaNode.Id = "1"
 
 $productNode = [Product]::new($MainExecutable)
-$productNode.SubItems += $packageNode
-$packageNode.Parent = $productNode
 
-$productNode.SubItems += $mediaNode
-$mediaNode.Parent = $productNode
+assignParent $productNode $packageNode
 
-$productNode.SubItems += $targetDirNode
-$targetDirNode.Parent = $productNode
+assignParent $productNode $mediaNode
+
+assignParent $productNode $targetDirNode
 
 $featureNode = [Feature]::new()
 
@@ -339,10 +387,7 @@ $featureNode.SubItems = foreach ($refId in $ComponentRefArray) {
 }
 foreach ($item in $featureNode.SubItems) {$item.Parent = $featureNode}
 
-$productNode.SubItems += $featureNode
-$featureNode.Parent = $productNode
-
-$productNode.Parent = $WixRoot
+assignParent $productNode $featureNode
 
 $mainDocument = New-Object -TypeName System.Xml.XmlDocument
 $decl = $mainDocument.CreateXmlDeclaration('1.0','windows-1251','')
@@ -364,3 +409,12 @@ function for creating root node
 get attributeSet
 get valid childElements
 #>
+
+$WX = [Wix]::new()
+[array]$WXProps = $WX.PSObject.Properties
+$WXnode = $mainDocument.CreateElement($WX.Type)
+foreach ($attr in $WXProps.Where({($_.Name -in $WX.attributeNames) -and ($_.Value)})) {
+    $attr.Name
+    $attr.Value
+    $WXnode.SetAttribute($attr.Name,$attr.Value)
+}
