@@ -132,7 +132,6 @@ class Media : Wix {
     [string]$VolumeLabel
 }
 
-
 class ComponentRef : Wix {
     [array]$attributeNames = @(
         "Id",
@@ -410,6 +409,9 @@ $mainDocument.Save($prodPath)
 <#
 TODO:
 function for creating root node
+method for creating childitem
+work with shortcuts
+separate "Directory" and "File" elements with "DirectoryRef"
 get attributeSet
 get valid childElements
 #>
