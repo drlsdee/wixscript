@@ -30,6 +30,12 @@ class Wix {
         }
     }
 
+    [void] CreateChild ([System.Object]$class) {
+        $childItem = $class::new()
+        $this.SubItems += $childItem
+        $childItem.Parent = $this
+    }
+
     Wix () {
         $this.IDasGUID()
         $this.xmlns = "http://schemas.microsoft.com/wix/2006/wi"
@@ -82,7 +88,7 @@ class Package : Wix {
     [string]$InstallerVersion
     [int]$Languages
     [ValidateSet("yes","no")]
-    [string]$Compressed = "yes"
+    [string]$Compressed #= "yes"
     [int]$SummaryCodepage
 
     Package ($main) {
@@ -121,12 +127,12 @@ class Media : Wix {
         )
     [ValidatePattern('((\d+)|(\$\(\w+\.(\w|[.])+\)))+', Options = "None")]
     [string]$Id
-    [string]$Cabinet = "cabinet.cab"
+    [string]$Cabinet #= "cabinet.cab"
     [ValidateSet("mszip", "high", "low", "medium", "none")]
-    [string]$CompressionLevel = "mszip"
+    [string]$CompressionLevel #= "mszip"
     [string]$DiskPrompt
     [ValidateSet("yes","no")]
-    [string]$EmbedCab = "yes"
+    [string]$EmbedCab #= "yes"
     [string]$Layout
     [string]$Source
     [string]$VolumeLabel
@@ -296,25 +302,6 @@ class File : WixFSObject {
 
 function makeXML {
     param (
-        [System.Xml.XmlElement]$parentNode,
-        [System.Object]$wixItem
-    )
-    [array]$attributeNames = $wixItem.attributeNames
-    [array]$attributeSet = $wixItem.PSObject.Properties | Where-Object {($_.Name -in $attributeNames) -and ($_.Value)}
-    $d = $parentNode.OwnerDocument.CreateElement($wixItem.Type)
-    foreach ($attribute in $attributeSet) {
-        $d.SetAttribute($attribute.Name,$attribute.Value)
-        $parentNode.AppendChild($d)
-    }
-    if ($wixItem.SubItems) {
-        foreach ($item in $wixItem.SubItems) {
-            makeXML $d $item
-        }
-    }
-}
-
-function makeXML2 {
-    param (
         [System.Xml.XmlElement]$xmlNode,
         [System.Object]$wixObject
     )
@@ -323,22 +310,29 @@ function makeXML2 {
     foreach ($attributePair in $attributeSet) {
         $xmlNode.SetAttribute($attributePair.Name, $attributePair.Value)
     }
+    if ($wixObject.SubItems) {
+        foreach ($item in $wixObject.SubItems) {
+            $childNode = $xmlNode.OwnerDocument.CreateElement($item.Type)
+            $xmlNode.AppendChild($childNode)
+            makeXML $childNode $item
+        }
+    }
 }
 
 $Location = "C:\Users\Administrator\Desktop\AZK_History\1\"
 Set-Location $Location
 
-$ComponentRefArray = @()
-
 $MainExecutableName = "maincontroller.exe"
+
+$MainExecutable = $null
 $MainExecutable = Get-ChildItem -Path $Location.Path -Recurse | Where-Object {$_.Name -eq $MainExecutableName}
 $RootDir = Get-Item $MainExecutable.Directory
 $RootDir = [Directory]::new($RootDir)
 
 function assignParent {
     param (
-        $parent,
-        $child
+        [System.Object]$parent,
+        [System.Object]$child
     )
     $parent.SubItems += $child
     $child.Parent = $parent
@@ -392,6 +386,7 @@ function CollectComponents {
     return $comps
 }
 
+$ComponentRefArray = @()
 $ComponentRefArray = CollectComponents $RootDir
 
 $featureNode.SubItems = foreach ($refId in $ComponentRefArray) {
@@ -402,15 +397,16 @@ foreach ($item in $featureNode.SubItems) {$item.Parent = $featureNode}
 assignParent $productNode $featureNode
 
 $WX = [Wix]::new()
+assignParent $WX $productNode
 
 $mainDocument = New-Object -TypeName System.Xml.XmlDocument
 $decl = $mainDocument.CreateXmlDeclaration('1.0','windows-1251','')
 $WixRoot = $mainDocument.CreateElement($WX.Type)
-makeXML2 $WixRoot $WX
+
 $mainDocument.InsertBefore($decl,$mainDocument.DocumentElement)
 $mainDocument.AppendChild($WixRoot)
 
-makeXML $WixRoot $productNode
+makeXML $WixRoot $WX
 
 $prodPath = (Join-Path -Path $Location -ChildPath $MainExecutable.BaseName) + ".wxs"
 
