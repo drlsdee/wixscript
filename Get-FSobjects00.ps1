@@ -296,10 +296,10 @@ class File : WixFSObject {
 function makeXML {
     param (
         [System.Xml.XmlElement]$parentNode,
-        $wixItem
+        [System.Object]$wixItem
     )
-    $attributeNames = $wixItem.attributeNames
-    $attributeSet = $wixItem.PSObject.Properties | Where-Object {($_.Name -in $attributeNames) -and ($_.Value)}
+    [array]$attributeNames = $wixItem.attributeNames
+    [array]$attributeSet = $wixItem.PSObject.Properties | Where-Object {($_.Name -in $attributeNames) -and ($_.Value)}
     $d = $parentNode.OwnerDocument.CreateElement($wixItem.Type)
     foreach ($attribute in $attributeSet) {
         $d.SetAttribute($attribute.Name,$attribute.Value)
@@ -312,16 +312,27 @@ function makeXML {
     }
 }
 
-$Location = "C:\Users\Administrator\Desktop\AZK_History\1\azkplan"
+function makeXML2 {
+    param (
+        [System.Xml.XmlElement]$xmlNode,
+        [System.Object]$wixObject
+    )
+    [array]$attributeNames = $wixObject.attributeNames
+    [array]$attributeSet = $wixObject.PSObject.Properties | Where-Object {($_.Name -in $attributeNames) -and ($_.Value)}
+    foreach ($attributePair in $attributeSet) {
+        $xmlNode.SetAttribute($attributePair.Name, $attributePair.Value)
+    }
+}
+
+$Location = "C:\Users\Administrator\Desktop\AZK_History\1\"
 Set-Location $Location
 
 $ComponentRefArray = @()
 
-$RootDir = Get-Item $Location
-$RootDir = [Directory]::new($RootDir)
-
 $MainExecutableName = "maincontroller.exe"
-$MainExecutable = Get-ChildItem -Path $RootDir.Path -Recurse | Where-Object {$_.Name -eq $MainExecutableName}
+$MainExecutable = Get-ChildItem -Path $Location.Path -Recurse | Where-Object {$_.Name -eq $MainExecutableName}
+$RootDir = Get-Item $MainExecutable.Directory
+$RootDir = [Directory]::new($RootDir)
 
 function assignParent {
     param (
@@ -389,16 +400,18 @@ foreach ($item in $featureNode.SubItems) {$item.Parent = $featureNode}
 
 assignParent $productNode $featureNode
 
+$WX = [Wix]::new()
+
 $mainDocument = New-Object -TypeName System.Xml.XmlDocument
 $decl = $mainDocument.CreateXmlDeclaration('1.0','windows-1251','')
-$WixRoot = $mainDocument.CreateElement("Wix")
-$WixRoot.SetAttribute("xmlns",'http://schemas.microsoft.com/wix/2006/wi')
+$WixRoot = $mainDocument.CreateElement($WX.Type)
+makeXML2 $WixRoot $WX
 $mainDocument.InsertBefore($decl,$mainDocument.DocumentElement)
 $mainDocument.AppendChild($WixRoot)
 
 makeXML $WixRoot $productNode
 
-$prodPath = (Join-Path -Path ($RootDir.Path | Resolve-Path) -ChildPath $MainExecutable.BaseName) + ".wxs"
+$prodPath = (Join-Path -Path $Location -ChildPath $MainExecutable.BaseName) + ".wxs"
 
 $mainDocument.Save('C:\mainDocument.xml')
 $mainDocument.Save($prodPath)
@@ -409,12 +422,3 @@ function for creating root node
 get attributeSet
 get valid childElements
 #>
-
-$WX = [Wix]::new()
-[array]$WXProps = $WX.PSObject.Properties
-$WXnode = $mainDocument.CreateElement($WX.Type)
-foreach ($attr in $WXProps.Where({($_.Name -in $WX.attributeNames) -and ($_.Value)})) {
-    $attr.Name
-    $attr.Value
-    $WXnode.SetAttribute($attr.Name,$attr.Value)
-}
