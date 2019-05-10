@@ -4,10 +4,16 @@
     return $newGuid
 }
 
+# Get WIX XML Schema from local path
+$xsdPath = "C:\wix.xsd"
 # Get WIX XML schema from URL
 $xsdURL = Invoke-WebRequest -Uri https://raw.githubusercontent.com/icsharpcode/SharpDevelop/master/data/schemas/wix.xsd
-# $wixSchema = $xsdURL.Content
-$wixSchema = Get-Content -Path "C:\wix.xsd"
+
+if ($xsdURL.Content) {
+    $wixSchema = $xsdURL.Content
+} else {
+    $wixSchema = Get-Content -Path $xsdPath
+}
 
 # Load schema
 $wiXSD = New-Object -TypeName System.Xml.XmlDocument
@@ -48,7 +54,6 @@ class Wix {
         if ($elementType -eq "Wix") {
             $this.attributeNames += "xmlns"
         }
-        $nameArr = @()
         if ($el.complexType) {
             $this.attributeNames += $el.complexType.attribute.name
         } else {
