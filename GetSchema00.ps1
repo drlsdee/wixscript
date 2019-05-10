@@ -1,6 +1,7 @@
 # Get WIX XML schema from URL
 $xsdURL = Invoke-WebRequest -Uri https://raw.githubusercontent.com/icsharpcode/SharpDevelop/master/data/schemas/wix.xsd
-$wixSchema = $xsdURL.Content
+# $wixSchema = $xsdURL.Content
+$wixSchema = Get-Content -Path "C:\wix.xsd"
 
 # Load schema
 $wiXSD = New-Object -TypeName System.Xml.XmlDocument
@@ -24,3 +25,20 @@ $compTypes[62].complexType.attribute.Where({$_.type})
 
 # Get attribute names for other elements
 $otherTypes[5].Attributes.Value
+
+function getAttributeNames {
+    param (
+        [string]$elementType
+    )
+    $el = $schemaElements.element.Where({$_.name -eq $elementType})
+    $nameArr = @()
+    if ($el.complexType) {
+        $nameArr += $el.complexType.attribute.name
+    } else {
+        $nameArr += $el.Attributes.Value
+    }
+    return $nameArr
+}
+
+$testArr = getAttributeNames "Product"
+$testArr

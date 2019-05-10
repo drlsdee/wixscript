@@ -4,14 +4,27 @@
     return $newGuid
 }
 
+# Get WIX XML schema from URL
+$xsdURL = Invoke-WebRequest -Uri https://raw.githubusercontent.com/icsharpcode/SharpDevelop/master/data/schemas/wix.xsd
+# $wixSchema = $xsdURL.Content
+$wixSchema = Get-Content -Path "C:\wix.xsd"
+
+# Load schema
+$wiXSD = New-Object -TypeName System.Xml.XmlDocument
+$wiXSD.LoadXml($wixSchema)
+
+# Select elements
+$schemaElements = $wiXSD.ChildNodes.Where({$_.NodeType -eq "Element"})
+
 class Wix {
+    $schemaEl = $schemaElements
     [string]$Type = $this.GetType().Name
     [string]$Id
     [string]$Name
-    [string]$xmlns
+    [string]$xmlns = "http://schemas.microsoft.com/wix/2006/wi"
     $Parent
     [array]$SubItems
-    [array]$attributeNames = @("xmlns")
+    [array]$attributeNames = @()
 
     [void] IDasGUID () {
         if ($this.Id -eq $null) {
@@ -30,22 +43,26 @@ class Wix {
         }
     }
 
+    [void] getValidAttributes ([string]$elementType, $schema) {
+        $el = $schema.element.Where({$_.name -eq $elementType})
+        if ($elementType -eq "Wix") {
+            $this.attributeNames += "xmlns"
+        }
+        $nameArr = @()
+        if ($el.complexType) {
+            $this.attributeNames += $el.complexType.attribute.name
+        } else {
+            $this.attributeNames += $el.Attributes.Value
+        }
+    }
+
     Wix () {
         $this.IDasGUID()
-        $this.xmlns = "http://schemas.microsoft.com/wix/2006/wi"
+        $this.getValidAttributes($this.Type, $this.schemaEl)
     }
 }
 
 class Product : Wix {
-    [array]$attributeNames = @(
-        "Name",
-        "Manufacturer",
-        "UpgradeCode",
-        "Language",
-        "Codepage",
-        "Version",
-        "Id"
-        )
     [string]$Name
     [string]$Manufacturer
     [string]$UpgradeCode
@@ -64,17 +81,6 @@ class Product : Wix {
 }
 
 class Package : Wix {
-    [array]$attributeNames = @(
-        "Comments",
-        "Compressed",
-        "Description",
-        "Id",
-        "InstallerVersion",
-        "Keywords",
-        "Languages",
-        "Manufacturer",
-        "SummaryCodepage"
-        )
     [string]$Keywords
     [string]$Description
     [string]$Comments
@@ -97,10 +103,6 @@ class Package : Wix {
 
 class Component : Wix {
     [string]$Guid
-    [array]$attributeNames = @(
-        "Id",
-        "Guid"
-    )
 
     Component ($obj) {
         $this.Guid = GenGuid
@@ -109,16 +111,6 @@ class Component : Wix {
 }
 
 class Media : Wix {
-    [array]$attributeNames = @(
-        "Id",
-        "Cabinet",
-        "CompressionLevel",
-        "DiskPrompt",
-        "EmbedCab",
-        "Layout",
-        "Source",
-        "VolumeLabel"
-        )
     [ValidatePattern('((\d+)|(\$\(\w+\.(\w|[.])+\)))+', Options = "None")]
     [string]$Id
     [string]$Cabinet #= "cabinet.cab"
@@ -133,10 +125,6 @@ class Media : Wix {
 }
 
 class ComponentRef : Wix {
-    [array]$attributeNames = @(
-        "Id",
-        "Primary"
-        )
     [ValidateSet("yes","no")]
     [string]$Primary
 
@@ -180,7 +168,6 @@ class WixFSObject : Wix {
 }
 
 class CreateFolder : WixFSObject {
-    [array]$attributeNames = @("Directory")
     [string]$Directory
 
     CreateFolder ($obj) {
@@ -190,17 +177,6 @@ class CreateFolder : WixFSObject {
 }
 
 class Feature : WixFSObject {
-    [array]$attributeNames = @(
-        "Id",
-        "Absent",
-        "AllowAdvertise",
-        "ConfigurableDirectory",
-        "Description", "Display",
-        "InstallDefault",
-        "Level",
-        "Title",
-        "TypicalDefault"
-        )
     [ValidateSet("allow","disallow")]
     [string]$Absent
     [ValidateSet("no","system","yes")]
@@ -223,10 +199,6 @@ class Feature : WixFSObject {
 
 
 class Directory : WixFSObject {
-    [array]$attributeNames = @(
-        "Id",
-        "Name"
-    )
     [array]$childFiles
     [array]$childDirs
     [array]$childComponents
@@ -282,11 +254,6 @@ class Directory : WixFSObject {
 }
 
 class File : WixFSObject {
-    [array]$attributeNames = @(
-        "Id",
-        "Name",
-        "Source"
-    )
     File ($obj) {
         $this.GetName($obj)
         $this.Source = $this.Path
@@ -412,6 +379,5 @@ function for creating root node
 method for creating childitem
 work with shortcuts
 separate "Directory" and "File" elements with "DirectoryRef"
-get attributeSet
 get valid childElements
 #>
